@@ -1,9 +1,9 @@
 clusters:
   app1:
     user: app1
-    password: app1pass
+    password: 
     database: app1
-    superuser_password: pgpass #"{{ vault_pass_app1 }}"
+    superuser_password: 
     port: 5432
     version: 18
     extensions: 
@@ -12,18 +12,18 @@ clusters:
       - projets
   as_cc:
     user: asccuser
-    password: asccpass
+    password: 
     database: as_cc
-    superuser_password: pgpass
+    superuser_password: 
     port: 5433
     version: 15
     extensions: 
       - postgis
   arve-saleve_cc_tst:
     user: arvesaleveuser
-    password: app1pass
+    password: 
     database: arve-saleve_cc_tst
-    superuser_password: pgpass
+    superuser_password: 
     port: 5434
     version: 15
     extensions: 
@@ -40,9 +40,9 @@ clusters:
       - referentiel_carto
   pmgf:
     user: pmgfuser
-    password: TtYpaR4WtTNG9ywT
+    password: 
     database: pmgf
-    superuser_password: pgpass
+    superuser_password: 
     port: 5437
     version: 18
     extensions: 
@@ -53,9 +53,9 @@ clusters:
       - referentiel_carto
   bdd_sea:
     user: seauser
-    password: EYYpSAO7Y!lCAo
+    password: 
     database: bdd_sea
-    superuser_password: pgpass
+    superuser_password: 
     port: 5438
     version: 18
     extensions:
