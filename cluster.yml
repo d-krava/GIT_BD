@@ -1,0 +1,88 @@
+clusters:
+  app1:
+    user: app1
+    password: app1pass
+    database: app1
+    superuser_password: pgpass #"{{ vault_pass_app1 }}"
+    port: 5432
+    version: 18
+    extensions: 
+      - postgis
+    schemas:
+      - projets
+  as_cc:
+    user: asccuser
+    password: asccpass
+    database: as_cc
+    superuser_password: pgpass
+    port: 5433
+    version: 15
+    extensions: 
+      - postgis
+  arve-saleve_cc_tst:
+    user: arvesaleveuser
+    password: app1pass
+    database: arve-saleve_cc_tst
+    superuser_password: pgpass
+    port: 5434
+    version: 15
+    extensions: 
+      - postgis
+      - postgres_fdw
+    schemas:
+      - projets
+      - administratif
+      - amenagement
+      - dechet
+      - economie
+      - environnement
+      - mobilité
+      - referentiel_carto
+  pmgf:
+    user: pmgfuser
+    password: TtYpaR4WtTNG9ywT
+    database: pmgf
+    superuser_password: pgpass
+    port: 5437
+    version: 18
+    extensions: 
+      - postgis
+      - postgres_fdw
+    schemas:
+      - projets
+      - referentiel_carto
+  bdd_sea:
+    user: seauser
+    password: EYYpSAO7Y!lCAo
+    database: bdd_sea
+    superuser_password: pgpass
+    port: 5438
+    version: 18
+    extensions:
+      - postgis
+      - ogr_fdw
+      - postgres_fdw
+    schemas: 
+      - projets
+  # base-tst:
+  #   user: testuser
+  #   password: testpass
+  #   database: base-tst
+  #   superuser_password: pgpass
+  #   port: 5435
+
+  # base-tst2:
+  #   user: testuser
+  #   password: testpass
+  #   database: base-tst2
+  #   superuser_password: pgpass
+  #   port: 5436
+
+  # pmgf:
+  #   user: adminrgd
+  #   password: ---
+  #   database: pmgf
+  #   superuser_password: ---
+  #   port: 5434
+  #   extensions: 
+  #     - postgis
