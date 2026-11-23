@@ -1,0 +1,60 @@
+services:
+{% for cluster_name, cluster in clusters.items() %}
+  postgres_{{ cluster_name }}:
+    image: ghcr.io/camptocamp/postgres:{{ cluster.version }}
+    command: -c 'work_mem=8MB' -c 'archive_mode=on' -c 'archive_command=/usr/local/bin/wal-g.sh wal-push %p'
+    environment:
+      POSTGRES_PASSWORD: "{{ cluster.superuser_password }}"
+      INSTANCE_NAME: "{{ cluster_name }}"
+    volumes:
+{% if cluster.version >= 18 %}
+      - postgres_{{ cluster_name }}_data:/var/lib/postgresql/{{ cluster.version }}/docker
+{% else %}
+      - postgres_{{ cluster_name }}_data:/var/lib/postgresql
+{% endif %}
+      - ./wal-g_{{ cluster_name }}.sh:/usr/local/bin/wal-g.sh
+      - ./backup-push.sh:/usr/local/bin/backup-push.sh
+      - /var/local/postgres:/mnt/shared
+    ports:
+      - "{{ cluster.port }}:5432"
+    restart: unless-stopped
+
+{% endfor %}
+  postgres_restoration:
+    image: ghcr.io/camptocamp/postgres:18 #${PG_VERSION:-18}
+    environment:
+      POSTGRES_PASSWORD: "pgpass"
+      PGDATA: "/mnt"
+    volumes:
+      - postgres_restoration:/mnt/
+{% for cluster_name in clusters %}
+      - ./wal-g_{{ cluster_name }}.sh:/usr/local/bin/wal-g_{{ cluster_name }}.sh
+{% endfor %}
+    restart: unless-stopped
+  garage:
+    image: dxflrs/garage:v2.3.0
+    entrypoint:
+      - /garage
+      - server
+      - --single-node
+      - --default-bucket
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: "{{ GARAGE_DEFAULT_ACCESS_KEY }}"
+      GARAGE_DEFAULT_SECRET_KEY: "{{ GARAGE_DEFAULT_SECRET_KEY }}"
+      GARAGE_DEFAULT_BUCKET: "{{ GARAGE_DEFAULT_BUCKET }}"
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3902:3902"
+      - "3903:3903"
+    volumes:
+      - ./garage.toml:/etc/garage.toml
+      - garage_data_dir:/mnt/data
+      - garage_metadata_dir:/mnt/meta
+volumes:
+  postgres_restoration:
+{% for cluster_name in clusters %}
+  postgres_{{ cluster_name }}_data:
+{% endfor %}
+  garage_data_dir:
+  garage_metadata_dir:

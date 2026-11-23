@@ -1,0 +1,71 @@
+---
+- name: Attendre que le port PostgreSQL soit prêt
+  wait_for:
+    host: "127.0.0.1"
+    port: "{{ cluster_item.value.port }}"
+    state: started
+    delay: 5
+    timeout: 30
+
+- name: Create postgres role {{ cluster_item.key }}:{{ cluster_item.value.superuser_password }}
+  community.postgresql.postgresql_user:
+    name: "{{ cluster_item.value.user }}"
+    password: "{{ cluster_item.value.password }}"
+    login_user: "postgres"
+    login_password: "{{ cluster_item.value.superuser_password }}"
+    login_host: 127.0.0.1
+    login_port: "{{ cluster_item.value.port }}"
+  register: result_role
+  until: result_role is not failed
+  retries: 6
+  delay: 5
+
+- name: Create postgres database {{ cluster_item.key }}
+  community.postgresql.postgresql_db:
+    name: "{{ cluster_item.value.database }}"
+    owner: "{{ cluster_item.value.user }}"
+    login_user: "postgres"
+    login_password: "{{ cluster_item.value.superuser_password }}"
+    login_host: 127.0.0.1
+    login_port: "{{ cluster_item.value.port }}"
+
+- name: Installer le paquet ogr_fdw dans le conteneur Docker postgres_{{ cluster_item.key }}
+  ansible.builtin.shell:
+    cmd: "docker compose exec -u root postgres_{{ cluster_item.key }} bash -c 'apt-get update && apt-get install -y --no-install-recommends postgresql-{{ cluster_item.value.version }}-ogr-fdw && rm -rf /var/lib/apt/lists/*'"
+    chdir: "/opt/postgres" 
+  register: apt_install_result
+  when: "cluster_item.value.extensions is defined and 'ogr_fdw' in cluster_item.value.extensions"
+  changed_when: "'Setting up' in apt_install_result.stdout | default('')"
+
+- name: Deploy extensions for {{ cluster_item.key }}
+  community.postgresql.postgresql_ext:
+    name: "{{ ext }}"
+    db: "{{ cluster_item.value.database }}"
+    login_user: "postgres"
+    login_password: "{{ cluster_item.value.superuser_password }}"
+    login_host: 127.0.0.1
+    login_port: "{{ cluster_item.value.port }}"
+  loop: "{{ cluster_item.value.extensions | default([]) }}"
+  loop_control:
+    loop_var: ext
+ 
+- name: Create schema for {{ cluster_item.key }}
+  community.postgresql.postgresql_schema:
+    name: "{{ item }}"
+    owner: "{{ cluster_item.value.user }}"
+    db: "{{ cluster_item.value.database }}"
+    login_user: "postgres"
+    login_password: "{{ cluster_item.value.superuser_password }}"
+    login_host: 127.0.0.1
+    login_port: "{{ cluster_item.value.port }}"
+  loop: "{{ cluster_item.value.schemas | default([]) }}"
+  loop_control:
+    loop_var: item
+
+- name: schedule full backup with cron for {{ cluster_item.key }}
+  ansible.builtin.cron:
+    name: "Full backup for {{ cluster_item.key }}"
+    minute: "0"
+    hour: "{{ cluster_index }}"
+    user: root
+    job: "docker compose -f /opt/postgres/docker-compose.yml exec postgres_{{ cluster_item.key }} /usr/local/bin/backup-push.sh"

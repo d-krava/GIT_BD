@@ -1,0 +1,219 @@
+---
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Ensure dependencies are installed
+  ansible.builtin.package:
+    name:
+      - bc
+      - curl
+      - expect
+      - git
+      - ca-certificates
+      - python3-psycopg2
+    state: present
+
+- name: Load clusters configuration
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/cluster.yml"
+
+- name: Create Docker GPG key directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download Docker's official GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Add Docker repository to Apt sources
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ ansible_facts['architecture'] }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+    filename: docker
+
+- name: Update apt cache after adding Docker repository
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Install Docker and Docker Compose
+  ansible.builtin.package:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Ensure Docker service is enabled and started
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add adminrgd user to docker group
+  ansible.builtin.user:
+    name: adminrgd
+    groups: docker
+    append: yes
+# tasks file for roles/postgres
+- name: Ensure keyrings folder exists
+  ansible.builtin.file:
+    path: /opt/postgres/
+    state: directory
+    mode: '0755'
+
+- name: Deploy wal-g.sh for app1
+  template:
+    src: wal-g.sh.j2
+    dest: /opt/postgres/wal-g-app1.sh
+    mode: '0755'
+  vars:
+    AWS_ACCESS_KEY_ID: "GK0fa604e459879c2098605318"  # Variable chiffrée avec ansible-vault
+    WALE_S3_PREFIX: "s3://app1/"
+    AWS_SECRET_ACCESS_KEY: "2dd38b99d0eed82bb85280e1ee9607d6ed75eb8677b38c200f9dc30cb0d27b44"
+  notify:
+    - Launch Composition
+
+- name: Deploy backup credentials for 
+  ansible.builtin.copy:
+    dest: "/opt/postgres/wal-g_{{ cluster_item.key }}.sh"
+    mode: '0755'
+    content: |
+      #!/bin/bash
+ 
+      export AWS_ENDPOINT=http://garage:3900
+      export WALE_S3_PREFIX=s3://backup/{{ cluster_item.key }}
+      export AWS_S3_FORCE_PATH_STYLE=true
+      export AWS_REGION=garage
+      export AWS_ACCESS_KEY_ID=GK4bedc60970ad8d42ffb37e1a
+      export AWS_SECRET_ACCESS_KEY=6d4f19210f69e5ef61c9e318e9854f55f4803157b5a28ca90bdf7dc0c6559df9
+      export PGHOST=localhost
+      export PGUSER=postgres
+      export PGPASSWORD={{ cluster_item.value.superuser_password }}
+      exec /usr/local/bin/wal-g $*
+  loop: "{{ clusters | dict2items }}"
+  loop_control:
+    loop_var: cluster_item
+    label: "{{ cluster_item.key }}"
+- name: Deploy backup-push 
+  ansible.builtin.copy:
+    src: backup-push.sh
+    dest: /opt/postgres/
+    owner: root
+    group: root
+    mode: u=rwx,g=rx,o=rx
+
+- name: Deploy Garage Configuration 
+  ansible.builtin.copy:
+    src: garage.toml
+    dest: /opt/postgres/
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+  notify:
+    - Restart Garage
+
+- name: Déployer docker-compose pour PostgreSQL
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/postgres/docker-compose.yml
+  vars:
+    postgres_password: "pgpass"
+    GARAGE_DEFAULT_ACCESS_KEY: "GK6eed4d03e0c06ad0c810c5887a0b89be"  # Variable chiffrée avec ansible-vault
+    GARAGE_DEFAULT_SECRET_KEY: "027c54113ccc3ed015f14b7a608a40096cbaa1cc4e58b3558598388e3e15625c"
+    GARAGE_DEFAULT_BUCKET: "default-bucket"
+  notify:
+    - Launch Composition
+
+# - name: Deploy postgis
+#   community.postgresql.postgresql_ext:
+#     name: postgis
+#     login_db: postgres
+#     login_port: "{{ item.port }}"
+#     login_password: pgpass
+#     login_host: 127.0.0.1
+#     schema: public
+
+# - name: Create postgres roles
+#   community.postgresql.postgresql_user:
+#     name: "{{ item.user }}"
+#     password: "{{ item.password }}"
+#     login_port: "{{ item.port }}"
+#     login_user: "postgres"
+#     login_password: "{{ item.superuser_password }}"
+#     login_host: 127.0.0.1
+#   with_items: "{{ clusters.values() }}"
+
+# - name: Create databases
+#   community.postgresql.postgresql_db:
+#     name: "{{ item.database }}"
+#     owner: "{{ item.user }}"
+#     login_user: "postgres"
+#     login_password: "{{ item.superuser_password }}"
+#     login_host: 127.0.0.1
+#     login_port: "{{ item.port }}"
+#   with_items: "{{ clusters.values() }}"
+
+# - name: Deploy extensions
+#   community.postgresql.postgresql_ext:
+#     name: "{{ item }}"
+#     db: "{{ item.database }}"
+#     login_user: "{{ item.user }}"
+#     login_password: "{{ item.password }}"
+#     login_host: 127.0.0.1
+#     port: "{{ item.port }}"
+#   loop: "{{ item.extensions }}"
+#   loop_control:
+#     loop_var: item
+#   with_items: "{{ clusters.values() }}"
+
+- name: Create Docker GPG key directory
+  ansible.builtin.file:
+    path: /var/local/postgres
+    owner: "999"
+    group: "999"
+    state: directory
+    mode: "0755"
+
+- name: Download wal-g binary
+  ansible.builtin.get_url:
+    url: https://github.com/wal-g/wal-g/releases/download/v3.0.8/wal-g-pg-24.04-amd64
+    dest: /usr/local/bin/wal-g
+    owner: root
+    group: root
+    mode: '0755'
+    checksum: sha256:342574292b1907af738d48ff2d1d771ad90a63e441b40a85208022144253f6b8
+
+- name: Launch full backup every night
+  ansible.builtin.cron:
+    name: "full backup"
+    minute: "0"
+    hour: "2"
+    job: "docker exec -u postgres postgres-app1-1 backup-push.sh"
+
+- name: S'assurer que les conteneurs Docker sont bien démarrés
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: /opt/postgres/
+  changed_when: false
+
+- name: Configure postgres cluster 
+  ansible.builtin.include_tasks: configure_cluster.yml
+  loop: "{{ clusters | dict2items }}"
+  loop_control:
+    loop_var: cluster_item
+    index_var: cluster_index
+    label: "{{ cluster_item.key }}"
+
+- name: Déployer le script de restauration interactif
+  ansible.builtin.copy:
+    src: restoration.sh
+    dest: /opt/postgres/restoration.sh
+    mode: '0755'
