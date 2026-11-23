@@ -1,7 +1,0 @@
----
-- name: Deploy and configure PostgreSQL
-  hosts: all
-  become: true
-
-  roles:
-    - postgres
